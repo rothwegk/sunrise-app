@@ -143,30 +143,48 @@ export default function Invoices() {
   }
 
   async function sendInvoice(inv: Invoice) {
-    if (!inv.customers?.email) {
-      alert('This customer has no email address on file.')
-      return
+  if (!inv.customers?.email) {
+    alert('This customer has no email address on file.')
+    return
+  }
+
+  setSendingId(inv.id)
+
+  try {
+    const balance = Number(inv.amount) - Number(inv.amount_paid)
+
+    const response = await fetch('/api/send-invoice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: inv.customers.email,
+        customerName: inv.customers.name,
+        amount: inv.amount,
+        balance: balance,
+        jobTitle: inv.jobs?.title || null,
+      }),
+    })
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to send email')
     }
 
-    setSendingId(inv.id)
-
-    // For now we just mark it as sent.
-    // Real email will be connected after we deploy to Render.
-    const { error } = await supabase
+    // Mark as sent in the database
+    await supabase
       .from('invoices')
       .update({ status: inv.status === 'draft' ? 'sent' : inv.status })
       .eq('id', inv.id)
 
-    setSendingId(null)
-
-    if (error) {
-      alert('Error: ' + error.message)
-      return
-    }
-
-    alert(`Invoice marked as sent to ${inv.customers.email}.\n\n(Real email delivery will work after we deploy to Render.)`)
+    alert(`Invoice sent to ${inv.customers.email}`)
     loadData()
+  } catch (err: any) {
+    alert('Error sending invoice: ' + (err.message || 'Unknown error'))
+  } finally {
+    setSendingId(null)
   }
+}
 
   useEffect(() => {
     loadData()
