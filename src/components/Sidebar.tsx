@@ -10,9 +10,10 @@ import {
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/customers', label: 'Customers', icon: Users },  
   { to: '/jobs', label: 'Jobs', icon: Wrench },
-  { to: '/customers', label: 'Customers', icon: Users },
-  { to: '/invoices', label: 'Invoices', icon: FileText },
+  { to: '/estimates', label: 'Estimates', icon: FileText },
+    { to: '/invoices', label: 'Invoices', icon: FileText },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
