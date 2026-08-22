@@ -72,6 +72,50 @@ export default function Estimates() {
     setShowForm(true)
   }
 
+async function sendEstimate(est: Estimate) {
+  if (!est.customers?.email) {
+    alert('This customer has no email address on file.')
+    return
+  }
+
+  if (!est.public_token) {
+    alert('This estimate is missing a public token. Please edit and re-save it.')
+    return
+  }
+
+  try {
+    const response = await fetch('/api/send-estimate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: est.customers.email,
+        customerName: est.customers.name,
+        title: est.title,
+        amount: est.amount,
+        requireDeposit: est.require_deposit,
+        depositAmount: est.deposit_amount,
+        description: est.description,
+        token: est.public_token,
+      }),
+    })
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to send email')
+    }
+
+    await supabase
+      .from('estimates')
+      .update({ status: 'sent' })
+      .eq('id', est.id)
+
+    alert(`Estimate sent to ${est.customers.email}`)
+    loadData()
+  } catch (err: any) {
+    alert('Error sending estimate: ' + (err.message || 'Unknown error'))
+  }
+}
   async function saveEstimate(e: React.FormEvent) {
     e.preventDefault()
     if (!title.trim() || !amount) return
