@@ -284,13 +284,12 @@ async function saveEstimate(e: React.FormEvent) {
         </form>
       )}
 
-      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-800">
           <h2 className="text-sm font-medium text-slate-300">
             All Estimates {estimates.length > 0 && `(${estimates.length})`}
           </h2>
         </div>
-
         {loading ? (
           <div className="p-8 text-center text-slate-500 text-sm">Loading...</div>
         ) : estimates.length === 0 ? (
@@ -307,28 +306,36 @@ async function saveEstimate(e: React.FormEvent) {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-  <span className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300 capitalize">
-    {est.status}
-  </span>
-  <button
-    onClick={() => sendEstimate(est)}
-    className="p-2 text-slate-400 hover:text-sky-400"
-    title="Send Estimate"
-  >
-    <Send className="w-4 h-4" />
-  </button>
-  <button
-    onClick={() => openEditForm(est)}
-    className="p-2 text-slate-400 hover:text-amber-400"
-    title="Edit"
-  >
-    <Pencil className="w-4 h-4" />
-  </button>
-  <button
-    onClick={() => deleteEstimate(est.id)}
-    className="p-2 text-slate-400 hover:text-red-400"
-    title="Delete"
-  >
-    <Trash2 className="w-4 h-4" />
-  </button>
-</div>
+                  <span className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300 capitalize">
+                    {est.status}
+                  </span>
+                  <button
+                    onClick={() => sendEstimate(est)}
+                    className="p-2 text-slate-400 hover:text-sky-400"
+                    title="Send Estimate"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => openEditForm(est)}
+                    className="p-2 text-slate-400 hover:text-amber-400"
+                    title="Edit"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => deleteEstimate(est.id)}
+                    className="p-2 text-slate-400 hover:text-red-400"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
