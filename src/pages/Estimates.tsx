@@ -115,8 +115,9 @@ async function sendEstimate(est: Estimate) {
   } catch (err: any) {
     alert('Error sending estimate: ' + (err.message || 'Unknown error'))
   }
-}
-  async function saveEstimate(e: React.FormEvent) {
+}  
+
+async function saveEstimate(e: React.FormEvent) {
     e.preventDefault()
     if (!title.trim() || !amount) return
 
@@ -306,29 +307,28 @@ async function sendEstimate(est: Estimate) {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300 capitalize">
-                    {est.status}
-                  </span>
-                  <button
-                    onClick={() => openEditForm(est)}
-                    className="p-2 text-slate-400 hover:text-amber-400"
-                    title="Edit"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => deleteEstimate(est.id)}
-                    className="p-2 text-slate-400 hover:text-red-400"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
+  <span className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300 capitalize">
+    {est.status}
+  </span>
+  <button
+    onClick={() => sendEstimate(est)}
+    className="p-2 text-slate-400 hover:text-sky-400"
+    title="Send Estimate"
+  >
+    <Send className="w-4 h-4" />
+  </button>
+  <button
+    onClick={() => openEditForm(est)}
+    className="p-2 text-slate-400 hover:text-amber-400"
+    title="Edit"
+  >
+    <Pencil className="w-4 h-4" />
+  </button>
+  <button
+    onClick={() => deleteEstimate(est.id)}
+    className="p-2 text-slate-400 hover:text-red-400"
+    title="Delete"
+  >
+    <Trash2 className="w-4 h-4" />
+  </button>
+</div>
