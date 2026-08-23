@@ -105,30 +105,15 @@ app.post('/api/send-estimate', async (req, res) => {
 app.get('/api/estimate/approve', async (req, res) => {
   const token = req.query.token
   if (!token) return res.status(400).send('Missing token')
-
-  console.log('=== APPROVE REQUEST ===')
-  console.log('Token received:', token)
-
   try {
     const { data: estimate, error } = await supabase
       .from('estimates')
       .select('*')
       .eq('public_token', token)
       .single()
-
-    console.log('Supabase data:', estimate)
-    console.log('Supabase error:', error)
-
     if (error || !estimate) {
-      return res.status(404).send(`
-        <html><body style="font-family: sans-serif; padding: 40px;">
-          <h2>Estimate not found or link is invalid.</h2>
-          <p><strong>Debug info:</strong></p>
-          <pre>${JSON.stringify({ token, error }, null, 2)}</pre>
-        </body></html>
-      `)
+      return res.status(404).send('Estimate not found or link is invalid.')
     }
-
     if (estimate.status === 'approved') {
       return res.send(`
         <html><body style="font-family: sans-serif; text-align: center; padding: 60px;">
@@ -137,12 +122,10 @@ app.get('/api/estimate/approve', async (req, res) => {
         </body></html>
       `)
     }
-
     await supabase
       .from('estimates')
       .update({ status: 'approved', updated_at: new Date().toISOString() })
       .eq('id', estimate.id)
-
     res.send(`
       <html><body style="font-family: sans-serif; text-align: center; padding: 60px;">
         <h2 style="color: green;">Estimate Approved</h2>
