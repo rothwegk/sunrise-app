@@ -64,7 +64,7 @@ app.post('/api/send-estimate', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' })
     }
 
-    const baseUrl = process.env.RENDER_EXTERNAL_URL || 'https://new-sunrise-app.onrender.com'
+    const baseUrl = 'https://sunrise-app-web.onrender.com'
     const approveUrl = `${baseUrl}/api/estimate/approve?token=${token}`
     const declineUrl = `${baseUrl}/api/estimate/decline?token=${token}`
 
