@@ -129,7 +129,7 @@ app.get('/api/estimate/approve', async (req, res) => {
   try {
     const { data: estimate, error } = await supabase
       .from('estimates')
-      .select('*, customers(name)')
+      .select('*')
       .eq('public_token', token)
       .single()
 
@@ -171,7 +171,7 @@ app.get('/api/estimate/decline', async (req, res) => {
   try {
     const { data: estimate, error } = await supabase
       .from('estimates')
-      .select('*, customers(id, name)')
+      .select('*')
       .eq('public_token', token)
       .single()
 
