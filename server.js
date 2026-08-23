@@ -5,30 +5,23 @@ import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { createClient } from '@supabase/supabase-js'
-
 dotenv.config()
-
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-
 const app = express()
 const resend = new Resend(process.env.RESEND_API_KEY)
-
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 )
-
 app.use(cors())
 app.use(express.json())
 app.use(express.static(path.join(__dirname, 'dist')))
-
 // ----- Send Invoice -----
 app.post('/api/send-invoice', async (req, res) => {
   try {
     const { to, customerName, amount, balance, jobTitle } = req.body
     if (!to) return res.status(400).json({ error: 'Missing recipient email' })
-
     const { data, error } = await resend.emails.send({
       from: 'Sunrise Handyman Services <glenn@sunrisesvcs.com>',
       to: [to],
@@ -46,7 +39,6 @@ app.post('/api/send-invoice', async (req, res) => {
         </div>
       `,
     })
-
     if (error) return res.status(500).json({ error: error.message })
     res.json({ success: true, id: data?.id })
   } catch (err) {
@@ -54,24 +46,19 @@ app.post('/api/send-invoice', async (req, res) => {
     res.status(500).json({ error: 'Failed to send email' })
   }
 })
-
 // ----- Send Estimate -----
 app.post('/api/send-estimate', async (req, res) => {
   try {
     const { to, customerName, title, amount, requireDeposit, depositAmount, description, token } = req.body
-
     if (!to || !token) {
       return res.status(400).json({ error: 'Missing required fields' })
     }
-
     const baseUrl = 'https://sunrise-app-web.onrender.com'
     const approveUrl = `${baseUrl}/api/estimate/approve?token=${token}`
     const declineUrl = `${baseUrl}/api/estimate/decline?token=${token}`
-
     const depositHtml = requireDeposit
       ? `<p><strong>Deposit required to schedule:</strong> $${Number(depositAmount).toFixed(2)}</p>`
       : ''
-
     const { data, error } = await resend.emails.send({
       from: 'Sunrise Handyman Services <glenn@sunrisesvcs.com>',
       to: [to],
@@ -81,24 +68,20 @@ app.post('/api/send-estimate', async (req, res) => {
           <h2 style="color: #d97706;">Sunrise Handyman Services</h2>
           <p>Hi ${customerName || 'there'},</p>
           <p>Here is your estimate:</p>
-          
+         
           <div style="background: #f8f8f8; padding: 16px; border-radius: 8px; margin: 20px 0;">
             <h3 style="margin-top: 0;">${title}</h3>
             ${description ? `<p>${description}</p>` : ''}
             <p style="font-size: 20px; font-weight: bold;">Total: $${Number(amount).toFixed(2)}</p>
             ${depositHtml}
           </div>
-
           <p>Please choose one of the options below:</p>
-
           <div style="margin: 30px 0;">
             <a href="${approveUrl}" style="background: #16a34a; color: white; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; margin-right: 12px;">Approve Estimate</a>
             <a href="${declineUrl}" style="background: #dc2626; color: white; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: bold;">Decline Estimate</a>
           </div>
-
           <p style="color: #666; font-size: 14px;">If the buttons don’t work, you can copy and paste these links:</p>
           <p style="font-size: 12px; color: #666;">Approve: ${approveUrl}<br/>Decline: ${declineUrl}</p>
-
           <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;" />
           <p style="color: #666; font-size: 12px;">
             Sunrise Handyman Services<br/>
@@ -108,23 +91,23 @@ app.post('/api/send-estimate', async (req, res) => {
         </div>
       `,
     })
-
     if (error) {
       console.error(error)
       return res.status(500).json({ error: error.message })
     }
-
     res.json({ success: true, id: data?.id })
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Failed to send estimate email' })
   }
 })
-
 // ----- Approve Estimate -----
 app.get('/api/estimate/approve', async (req, res) => {
   const token = req.query.token
   if (!token) return res.status(400).send('Missing token')
+
+  console.log('=== APPROVE REQUEST ===')
+  console.log('Token received:', token)
 
   try {
     const { data: estimate, error } = await supabase
@@ -133,8 +116,17 @@ app.get('/api/estimate/approve', async (req, res) => {
       .eq('public_token', token)
       .single()
 
+    console.log('Supabase data:', estimate)
+    console.log('Supabase error:', error)
+
     if (error || !estimate) {
-      return res.status(404).send('Estimate not found or link is invalid.')
+      return res.status(404).send(`
+        <html><body style="font-family: sans-serif; padding: 40px;">
+          <h2>Estimate not found or link is invalid.</h2>
+          <p><strong>Debug info:</strong></p>
+          <pre>${JSON.stringify({ token, error }, null, 2)}</pre>
+        </body></html>
+      `)
     }
 
     if (estimate.status === 'approved') {
@@ -154,7 +146,7 @@ app.get('/api/estimate/approve', async (req, res) => {
     res.send(`
       <html><body style="font-family: sans-serif; text-align: center; padding: 60px;">
         <h2 style="color: green;">Estimate Approved</h2>
-        <p>Thank you${estimate.customers?.name ? ', ' + estimate.customers.name : ''}. We have received your approval and will contact you shortly to schedule the work.</p>
+        <p>Thank you. We have received your approval and will contact you shortly to schedule the work.</p>
       </body></html>
     `)
   } catch (err) {
@@ -162,28 +154,23 @@ app.get('/api/estimate/approve', async (req, res) => {
     res.status(500).send('Something went wrong. Please try again or call us.')
   }
 })
-
 // ----- Decline Estimate -----
 app.get('/api/estimate/decline', async (req, res) => {
   const token = req.query.token
   if (!token) return res.status(400).send('Missing token')
-
   try {
     const { data: estimate, error } = await supabase
       .from('estimates')
       .select('*')
       .eq('public_token', token)
       .single()
-
     if (error || !estimate) {
       return res.status(404).send('Estimate not found or link is invalid.')
     }
-
     await supabase
       .from('estimates')
       .update({ status: 'declined', updated_at: new Date().toISOString() })
       .eq('id', estimate.id)
-
     if (estimate.customer_id) {
       await supabase
         .from('customers')
@@ -193,7 +180,6 @@ app.get('/api/estimate/decline', async (req, res) => {
         })
         .eq('id', estimate.customer_id)
     }
-
     res.send(`
       <html><body style="font-family: sans-serif; text-align: center; padding: 60px;">
         <h2>Estimate Declined</h2>
@@ -205,12 +191,10 @@ app.get('/api/estimate/decline', async (req, res) => {
     res.status(500).send('Something went wrong. Please try again or call us.')
   }
 })
-
 // Fallback – serve the React app
 app.get(/(.*)/, (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'))
 })
-
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
