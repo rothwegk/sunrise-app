@@ -31,7 +31,7 @@ export default function Jobs() {
   const [description, setDescription] = useState('')
   const [customerId, setCustomerId] = useState('')
   const [scheduledDate, setScheduledDate] = useState<Date | null>(null)
-  const [status, setStatus] = useState('scheduled')
+  const [status, setStatus] = useState('unscheduled')
   const [previousStatus, setPreviousStatus] = useState<string | null>(null)
 
   async function loadData() {
@@ -54,7 +54,7 @@ export default function Jobs() {
     setDescription('')
     setCustomerId('')
     setScheduledDate(null)
-    setStatus('scheduled')
+    setStatus('unscheduled')
     setPreviousStatus(null)
     setShowForm(true)
   }
@@ -262,6 +262,7 @@ export default function Jobs() {
                 onChange={(e) => setStatus(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
               >
+                <option value="unscheduled">Unscheduled</option>
                 <option value="scheduled">Scheduled</option>
                 <option value="in_progress">In Progress</option>
                 <option value="completed">Completed</option>
