@@ -137,7 +137,7 @@ app.post('/api/on-my-way', async (req, res) => {
     }
 
     const message = await twilioClient.messages.create({
-      body: `Hi ${customerName || 'there'}, this is Glenn from Sunrise Handyman Services. I’m on my way${jobTitle ? ` for your ${jobTitle} job` : ''} and should arrive within 30 minutes.`,
+      body: `Hi ${customerName || 'there'}, this is Glenn from Sunrise Handyman Services. I'm on my way${jobTitle ? ` for your ${jobTitle} job` : ''} and should arrive within 30 minutes.\n\nThis is an automated text — please do not reply.\nReply STOP to opt out of future texts.`,
       from: process.env.TWILIO_PHONE_NUMBER,
       to: to
     })
