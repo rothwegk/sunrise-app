@@ -182,4 +182,65 @@ app.get('/api/estimate/approve', async (req, res) => {
     res.send(`
       <html><body style="font-family: sans-serif; text-align: center; padding: 60px;">
         <h2 style="color: green;">Estimate Approved</h2>
+        <p>Thank you. We have received your approval and will contact you shortly to schedule the work.</p>
+      </body></html>
+    `)
+  } catch (err) {
+    console.error(err)
+    res.status(500).send('Something went wrong. Please try again or call us.')
+  }
+})
+
+// ----- Decline Estimate -----
+app.get('/api/estimate/decline', async (req, res) => {
+  const token = req.query.token
+  if (!token) return res.status(400).send('Missing token')
+
+  try {
+    const { data: estimate, error } = await supabase
+      .from('estimates')
+      .select('*')
+      .eq('public_token', token)
+      .single()
+
+    if (error || !estimate) {
+      return res.status(404).send('Estimate not found or link is invalid.')
+    }
+
+    await supabase
+      .from('estimates')
+      .update({ status: 'declined', updated_at: new Date().toISOString() })
+      .eq('id', estimate.id)
+
+    if (estimate.customer_id) {
+      await supabase
+        .from('customers')
+        .update({
+          do_not_service: true,
+          do_not_service_reason: 'Declined estimate'
+        })
+        .eq('id', estimate.customer_id)
+    }
+
+    res.send(`
+      <html><body style="font-family: sans-serif; text-align: center; padding: 60px;">
+        <h2>Estimate Declined</h2>
+        <p>Thank you for letting us know. This estimate has been closed.</p>
+      </body></html>
+    `)
+  } catch (err) {
+    console.error(err)
+    res.status(500).send('Something went wrong. Please try again or call us.')
+  }
+})
+
+// Fallback – serve the React app
+app.get(/(.*)/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'))
+})
+
+const PORT = process.env.PORT || 3000
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`)
+})
        
