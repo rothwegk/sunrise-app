@@ -6,14 +6,16 @@ import {
   FileText,
   Settings,
   Sun,
+  Calendar,
 } from 'lucide-react'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/customers', label: 'Customers', icon: Users },  
+  { to: '/customers', label: 'Customers', icon: Users },
   { to: '/jobs', label: 'Jobs', icon: Wrench },
+  { to: '/calendar', label: 'Calendar', icon: Calendar },
   { to: '/estimates', label: 'Estimates', icon: FileText },
-    { to: '/invoices', label: 'Invoices', icon: FileText },
+  { to: '/invoices', label: 'Invoices', icon: FileText },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 

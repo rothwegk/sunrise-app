@@ -6,6 +6,7 @@ import Customers from './pages/Customers'
 import Invoices from './pages/Invoices'
 import Settings from './pages/Settings'
 import Estimates from './pages/Estimates'
+import Calendar from './pages/Calendar'
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="estimates" element={<Estimates />} />
           <Route path="jobs" element={<Jobs />} />
+          <Route path="calendar" element={<Calendar />} />
           <Route path="customers" element={<Customers />} />
           <Route path="invoices" element={<Invoices />} />
           <Route path="settings" element={<Settings />} />
