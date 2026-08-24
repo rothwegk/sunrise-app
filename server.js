@@ -142,6 +142,13 @@ app.post('/api/on-my-way', async (req, res) => {
       to: to
     })
 
+    res.json({ success: true, sid: message.sid })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message || 'Failed to send text' })
+  }
+})
+
 // ----- Job Scheduled Text -----
 app.post('/api/job-scheduled', async (req, res) => {
   try {
@@ -161,12 +168,6 @@ app.post('/api/job-scheduled', async (req, res) => {
       to: to
     })
 
-    res.json({ success: true, sid: message.sid })
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: err.message || 'Failed to send text' })
-  }
-})
     res.json({ success: true, sid: message.sid })
   } catch (err) {
     console.error(err)
@@ -268,4 +269,3 @@ const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })
-       
