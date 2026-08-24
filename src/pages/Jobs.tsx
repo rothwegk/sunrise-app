@@ -48,3 +48,265 @@ export default function Jobs() {
 
   function openNewForm() {
     setEditingId(null)
+    setTitle('')
+    setDescription('')
+    setCustomerId('')
+    setScheduledDate(null)
+    setStatus('scheduled')
+    setShowForm(true)
+  }
+
+  function openEditForm(job: Job) {
+    setEditingId(job.id)
+    setTitle(job.title)
+    setDescription(job.description || '')
+    setCustomerId(job.customer_id || '')
+    setScheduledDate(job.scheduled_date ? new Date(job.scheduled_date) : null)
+    setStatus(job.status)
+    setShowForm(true)
+  }
+
+  async function saveJob(e: React.FormEvent) {
+    e.preventDefault()
+    if (!title.trim()) return
+
+    const payload = {
+      title: title.trim(),
+      description: description.trim() || null,
+      customer_id: customerId || null,
+      scheduled_date: scheduledDate ? scheduledDate.toISOString().split('T')[0] : null,
+      status,
+    }
+
+    if (editingId) {
+      const { error } = await supabase.from('jobs').update(payload).eq('id', editingId)
+      if (error) {
+        alert('Error updating job: ' + error.message)
+        return
+      }
+    } else {
+      const { error } = await supabase.from('jobs').insert(payload)
+      if (error) {
+        alert('Error creating job: ' + error.message)
+        return
+      }
+    }
+
+    setShowForm(false)
+    setEditingId(null)
+    loadData()
+  }
+
+  async function deleteJob(id: string, title: string) {
+    if (!confirm(`Delete job "${title}"? This cannot be undone.`)) return
+    const { error } = await supabase.from('jobs').delete().eq('id', id)
+    if (error) {
+      alert('Error deleting: ' + error.message)
+      return
+    }
+    loadData()
+  }
+
+  async function sendOnMyWay(job: Job) {
+    if (!job.customer_id) {
+      alert('This job has no customer assigned.')
+      return
+    }
+
+    const { data: customer, error } = await supabase
+      .from('customers')
+      .select('phone, name')
+      .eq('id', job.customer_id)
+      .single()
+
+    if (error || !customer?.phone) {
+      alert('This customer has no phone number on file.')
+      return
+    }
+
+    if (!confirm(`Send "On my way" text to ${customer.name} (${customer.phone})?`)) return
+
+    try {
+      const response = await fetch('/api/on-my-way', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: customer.phone,
+          customerName: customer.name,
+          jobTitle: job.title,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to send text')
+      }
+
+      alert('On my way text sent!')
+    } catch (err: any) {
+      alert('Error: ' + (err.message || 'Could not send text'))
+    }
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-semibold text-white">Jobs</h1>
+          <p className="text-slate-400 mt-1">Create and manage handyman jobs</p>
+        </div>
+        <button
+          onClick={openNewForm}
+          className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-medium text-sm px-4 py-2.5 rounded-lg transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          New Job
+        </button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={saveJob} className="bg-slate-900 border border-slate-800 rounded-xl p-5 mb-6 space-y-4">
+          <h3 className="text-sm font-medium text-white">
+            {editingId ? 'Edit Job' : 'New Job'}
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-xs text-slate-400 mb-1.5">Job Title *</label>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1.5">Customer</label>
+              <select
+                value={customerId}
+                onChange={(e) => setCustomerId(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+              >
+                <option value="">— Select customer —</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1.5">Scheduled Date</label>
+              <DatePicker
+                selected={scheduledDate}
+                onChange={(date: Date | null) => setScheduledDate(date)}
+                dateFormat="yyyy-MM-dd"
+                placeholderText="Select date"
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-400 mb-1.5">Status</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+              >
+                <option value="scheduled">Scheduled</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-xs text-slate-400 mb-1.5">Description</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <button type="submit" className="bg-amber-500 hover:bg-amber-600 text-slate-900 text-sm font-medium px-4 py-2 rounded-lg">
+              {editingId ? 'Update Job' : 'Create Job'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowForm(false)
+                setEditingId(null)
+              }}
+              className="text-slate-400 text-sm px-4 py-2"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
+      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-800">
+          <h2 className="text-sm font-medium text-slate-300">
+            All Jobs {jobs.length > 0 && `(${jobs.length})`}
+          </h2>
+        </div>
+
+        {loading ? (
+          <div className="p-8 text-center text-slate-500 text-sm">Loading...</div>
+        ) : jobs.length === 0 ? (
+          <div className="p-8 text-center">
+            <p className="text-slate-500 text-sm">No jobs yet.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-800">
+            {jobs.map((job) => (
+              <div key={job.id} className="px-5 py-4 flex items-center justify-between hover:bg-slate-800/50">
+                <div>
+                  <div className="font-medium text-white">{job.title}</div>
+                  <div className="text-xs text-slate-400 mt-1">
+                    {job.customers?.name || 'No customer'}
+                    {job.scheduled_date && ` · ${job.scheduled_date}`}
+                    {` · ${job.status}`}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => sendOnMyWay(job)}
+                    className="p-2 text-slate-400 hover:text-sky-400 transition-colors"
+                    title="On My Way"
+                  >
+                    <Navigation className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => openEditForm(job)}
+                    className="p-2 text-slate-400 hover:text-amber-400 transition-colors"
+                    title="Edit"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => deleteJob(job.id, job.title)}
+                    className="p-2 text-slate-400 hover:text-red-400 transition-colors"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
