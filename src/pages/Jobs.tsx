@@ -16,10 +16,24 @@ type Job = {
   description: string | null
   status: string
   scheduled_date: string | null
+  scheduled_time: string | null
   customer_id: string | null
   customers?: { name: string } | null
   created_at: string
 }
+
+const timeOptions = [
+  '7:00 AM', '7:30 AM',
+  '8:00 AM', '8:30 AM',
+  '9:00 AM', '9:30 AM',
+  '10:00 AM', '10:30 AM',
+  '11:00 AM', '11:30 AM',
+  '12:00 PM', '12:30 PM',
+  '1:00 PM', '1:30 PM',
+  '2:00 PM', '2:30 PM',
+  '3:00 PM', '3:30 PM',
+  '4:00 PM'
+]
 
 export default function Jobs() {
   const [jobs, setJobs] = useState<Job[]>([])
@@ -31,6 +45,7 @@ export default function Jobs() {
   const [description, setDescription] = useState('')
   const [customerId, setCustomerId] = useState('')
   const [scheduledDate, setScheduledDate] = useState<Date | null>(null)
+  const [scheduledTime, setScheduledTime] = useState('')
   const [status, setStatus] = useState('unscheduled')
   const [previousStatus, setPreviousStatus] = useState<string | null>(null)
 
@@ -54,6 +69,7 @@ export default function Jobs() {
     setDescription('')
     setCustomerId('')
     setScheduledDate(null)
+    setScheduledTime('')
     setStatus('unscheduled')
     setPreviousStatus(null)
     setShowForm(true)
@@ -65,6 +81,7 @@ export default function Jobs() {
     setDescription(job.description || '')
     setCustomerId(job.customer_id || '')
     setScheduledDate(job.scheduled_date ? new Date(job.scheduled_date) : null)
+    setScheduledTime(job.scheduled_time || '')
     setStatus(job.status)
     setPreviousStatus(job.status)
     setShowForm(true)
@@ -79,6 +96,7 @@ export default function Jobs() {
       description: description.trim() || null,
       customer_id: customerId || null,
       scheduled_date: scheduledDate ? scheduledDate.toISOString().split('T')[0] : null,
+      scheduled_time: scheduledTime || null,
       status,
     }
 
@@ -112,6 +130,7 @@ export default function Jobs() {
               customerName: customer.name,
               jobTitle: title.trim(),
               scheduledDate: payload.scheduled_date,
+              scheduledTime: payload.scheduled_time,
             }),
           })
           const result = await response.json()
@@ -256,6 +275,20 @@ export default function Jobs() {
             </div>
 
             <div>
+              <label className="block text-xs text-slate-400 mb-1.5">Time</label>
+              <select
+                value={scheduledTime}
+                onChange={(e) => setScheduledTime(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+              >
+                <option value="">— Select time —</option>
+                {timeOptions.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
               <label className="block text-xs text-slate-400 mb-1.5">Status</label>
               <select
                 value={status}
@@ -320,7 +353,7 @@ export default function Jobs() {
                   <div className="font-medium text-white">{job.title}</div>
                   <div className="text-xs text-slate-400 mt-1">
                     {job.customers?.name || 'No customer'}
-                    {job.scheduled_date && ` · ${job.scheduled_date}`}
+                    {job.scheduled_date && ` · ${job.scheduled_date}${job.scheduled_time ? ` at ${job.scheduled_time}` : ''}`}
                     {` · ${job.status}`}
                   </div>
                 </div>
