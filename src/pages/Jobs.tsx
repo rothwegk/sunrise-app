@@ -139,9 +139,22 @@ export default function Jobs() {
 
       const result = await response.json()
 
-      if (!response.ok) {
+            if (!response.ok) {
         throw new Error(result.error || 'Failed to send text')
       }
+
+      const { error: statusError } = await supabase
+        .from('jobs')
+        .update({ status: 'in_progress' })
+        .eq('id', job.id)
+
+      if (statusError) {
+        alert('Text sent, but could not update status: ' + statusError.message)
+      } else {
+        alert('On my way text sent! Job marked In Progress.')
+      }
+
+      loadData()
 
       alert('On my way text sent!')
     } catch (err: any) {
