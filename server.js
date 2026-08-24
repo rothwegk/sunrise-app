@@ -152,18 +152,20 @@ app.post('/api/on-my-way', async (req, res) => {
 // ----- Job Scheduled Text -----
 app.post('/api/job-scheduled', async (req, res) => {
   try {
-    const { to, customerName, jobTitle, scheduledDate } = req.body
-
+    const { to, customerName, jobTitle, scheduledDate, scheduledTime } = req.body
     if (!to) {
       return res.status(400).json({ error: 'Missing phone number' })
     }
 
-    const datePart = scheduledDate
-      ? ` for ${scheduledDate}`
-      : ''
+    let whenPart = ''
+    if (scheduledDate && scheduledTime) {
+      whenPart = ` for ${scheduledDate} at ${scheduledTime}`
+    } else if (scheduledDate) {
+      whenPart = ` for ${scheduledDate}`
+    }
 
     const message = await twilioClient.messages.create({
-      body: `Hi ${customerName || 'there'}, this is Glenn from Sunrise Handyman Services. Your${jobTitle ? ` ${jobTitle}` : ''} job is scheduled${datePart}.\n\nFor questions, call or text (352) 634-1962.\n\nThis is an automated text — please do not reply to this number.\nReply STOP to opt out of future texts.`,
+      body: `Hi ${customerName || 'there'}, this is Glenn from Sunrise Handyman Services. Your${jobTitle ? ` ${jobTitle}` : ''} job is scheduled${whenPart}.\n\nFor questions, call or text (352) 634-1962.\n\nThis is an automated text — please do not reply to this number.\nReply STOP to opt out of future texts.`,
       from: process.env.TWILIO_PHONE_NUMBER,
       to: to
     })
