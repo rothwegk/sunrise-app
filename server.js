@@ -142,6 +142,31 @@ app.post('/api/on-my-way', async (req, res) => {
       to: to
     })
 
+// ----- Job Scheduled Text -----
+app.post('/api/job-scheduled', async (req, res) => {
+  try {
+    const { to, customerName, jobTitle, scheduledDate } = req.body
+
+    if (!to) {
+      return res.status(400).json({ error: 'Missing phone number' })
+    }
+
+    const datePart = scheduledDate
+      ? ` for ${scheduledDate}`
+      : ''
+
+    const message = await twilioClient.messages.create({
+      body: `Hi ${customerName || 'there'}, this is Glenn from Sunrise Handyman Services. Your${jobTitle ? ` ${jobTitle}` : ''} job is scheduled${datePart}.\n\nThis is an automated text — please do not reply.\nReply STOP to opt out of future texts.`,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: to
+    })
+
+    res.json({ success: true, sid: message.sid })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: err.message || 'Failed to send text' })
+  }
+})
     res.json({ success: true, sid: message.sid })
   } catch (err) {
     console.error(err)

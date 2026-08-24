@@ -31,6 +31,7 @@ export default function Jobs() {
   const [customerId, setCustomerId] = useState('')
   const [scheduledDate, setScheduledDate] = useState<Date | null>(null)
   const [status, setStatus] = useState('scheduled')
+  const [previousStatus, setPreviousStatus] = useState<string | null>(null) 
 
   async function loadData() {
     setLoading(true)
@@ -46,37 +47,87 @@ export default function Jobs() {
     setLoading(false)
   }
 
-  function openNewForm() {
-    setEditingId(null)
-    setTitle('')
-    setDescription('')
-    setCustomerId('')
-    setScheduledDate(null)
-    setStatus('scheduled')
-    setShowForm(true)
-  }
+function openNewForm() {
+  setEditingId(null)
+  setTitle('')
+  setDescription('')
+  setCustomerId('')
+  setScheduledDate(null)
+  setStatus('scheduled')
+  setPreviousStatus(null)
+  setShowForm(true)
+}
 
-  function openEditForm(job: Job) {
-    setEditingId(job.id)
-    setTitle(job.title)
-    setDescription(job.description || '')
-    setCustomerId(job.customer_id || '')
-    setScheduledDate(job.scheduled_date ? new Date(job.scheduled_date) : null)
-    setStatus(job.status)
-    setShowForm(true)
-  }
+function openEditForm(job: Job) {
+  setEditingId(job.id)
+  setTitle(job.title)
+  setDescription(job.description || '')
+  setCustomerId(job.customer_id || '')
+  setScheduledDate(job.scheduled_date ? new Date(job.scheduled_date) : null)
+  setStatus(job.status)
+  setPreviousStatus(job.status)
+  setShowForm(true)
+}
 
   async function saveJob(e: React.FormEvent) {
-    e.preventDefault()
-    if (!title.trim()) return
+  e.preventDefault()
+  if (!title.trim()) return
 
-    const payload = {
-      title: title.trim(),
-      description: description.trim() || null,
-      customer_id: customerId || null,
-      scheduled_date: scheduledDate ? scheduledDate.toISOString().split('T')[0] : null,
-      status,
+  const payload = {
+    title: title.trim(),
+    description: description.trim() || null,
+    customer_id: customerId || null,
+    scheduled_date: scheduledDate ? scheduledDate.toISOString().split('T')[0] : null,
+    status,
+  }
+
+  if (editingId) {
+    const { error } = await supabase.from('jobs').update(payload).eq('id', editingId)
+    if (error) {
+      alert('Error updating job: ' + error.message)
+      return
     }
+  } else {
+    const { error } = await supabase.from('jobs').insert(payload)
+    if (error) {
+      alert('Error creating job: ' + error.message)
+      return
+    }
+  }
+
+  // Send scheduled confirmation once when job becomes scheduled
+  const becameScheduled =
+    status === 'scheduled' && (previousStatus === null || previousStatus !== 'scheduled')
+
+  if (becameScheduled && customerId) {
+    const customer = customers.find((c) => c.id === customerId)
+    if (customer?.phone) {
+      try {
+        const response = await fetch('/api/job-scheduled', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: customer.phone,
+            customerName: customer.name,
+            jobTitle: title.trim(),
+            scheduledDate: payload.scheduled_date,
+          }),
+        })
+        const result = await response.json()
+        if (!response.ok) {
+          alert('Job saved, but text failed: ' + (result.error || 'Unknown error'))
+        }
+      } catch (err: any) {
+        alert('Job saved, but text failed: ' + (err.message || 'Unknown error'))
+      }
+    }
+  }
+
+  setShowForm(false)
+  setEditingId(null)
+  setPreviousStatus(null)
+  loadData()
+}
 
     if (editingId) {
       const { error } = await supabase.from('jobs').update(payload).eq('id', editingId)
