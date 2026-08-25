@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, History } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 type Customer = {
@@ -8,6 +8,32 @@ type Customer = {
   email: string | null
   phone: string | null
   address: string | null
+  do_not_service?: boolean
+  do_not_service_reason?: string | null
+  created_at: string
+}
+
+type Job = {
+  id: string
+  title: string
+  status: string
+  scheduled_date: string | null
+  created_at: string
+}
+
+type Estimate = {
+  id: string
+  title: string
+  amount: number
+  status: string
+  created_at: string
+}
+
+type Invoice = {
+  id: string
+  amount: number
+  amount_paid: number
+  status: string
   created_at: string
 }
 
@@ -16,6 +42,13 @@ export default function Customers() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+
+  // History state
+  const [historyCustomer, setHistoryCustomer] = useState<Customer | null>(null)
+  const [historyJobs, setHistoryJobs] = useState<Job[]>([])
+  const [historyEstimates, setHistoryEstimates] = useState<Estimate[]>([])
+  const [historyInvoices, setHistoryInvoices] = useState<Invoice[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   // form fields
   const [name, setName] = useState('')
@@ -32,6 +65,34 @@ export default function Customers() {
 
     if (!error) setCustomers(data || [])
     setLoading(false)
+  }
+
+  async function openHistory(customer: Customer) {
+    setHistoryCustomer(customer)
+    setHistoryLoading(true)
+
+    const [jobsRes, estRes, invRes] = await Promise.all([
+      supabase
+        .from('jobs')
+        .select('id, title, status, scheduled_date, created_at')
+        .eq('customer_id', customer.id)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('estimates')
+        .select('id, title, amount, status, created_at')
+        .eq('customer_id', customer.id)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('invoices')
+        .select('id, amount, amount_paid, status, created_at')
+        .eq('customer_id', customer.id)
+        .order('created_at', { ascending: false }),
+    ])
+
+    setHistoryJobs(jobsRes.data || [])
+    setHistoryEstimates(estRes.data || [])
+    setHistoryInvoices(invRes.data || [])
+    setHistoryLoading(false)
   }
 
   function openNewForm() {
@@ -57,7 +118,6 @@ export default function Customers() {
     if (!name.trim()) return
 
     if (editingId) {
-      // Update existing
       const { error } = await supabase
         .from('customers')
         .update({
@@ -73,7 +133,6 @@ export default function Customers() {
         return
       }
     } else {
-      // Create new
       const { error } = await supabase.from('customers').insert({
         name: name.trim(),
         email: email.trim() || null,
@@ -112,7 +171,7 @@ export default function Customers() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-semibold text-white">Customers</h1>
-          <p className="text-slate-400 mt-1">Customer directory and contact info</p>
+          <p className="text-slate-400 mt-1">Customer directory and history</p>
         </div>
         <button
           onClick={openNewForm}
@@ -182,6 +241,89 @@ export default function Customers() {
         </form>
       )}
 
+      {/* History Panel */}
+      {historyCustomer && (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-medium text-white">{historyCustomer.name} — History</h3>
+              {historyCustomer.do_not_service && (
+                <div className="mt-1 text-sm font-medium text-red-400">DO NOT SERVICE</div>
+              )}
+            </div>
+            <button
+              onClick={() => setHistoryCustomer(null)}
+              className="text-slate-400 hover:text-white text-sm"
+            >
+              Close
+            </button>
+          </div>
+
+          {historyLoading ? (
+            <div className="text-slate-500 text-sm">Loading history...</div>
+          ) : (
+            <div className="space-y-6">
+              {/* Jobs */}
+              <div>
+                <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Jobs</h4>
+                {historyJobs.length === 0 ? (
+                  <p className="text-sm text-slate-500">No jobs</p>
+                ) : (
+                  <div className="space-y-2">
+                    {historyJobs.map((job) => (
+                      <div key={job.id} className="text-sm text-slate-300">
+                        <span className="text-white">{job.title}</span>
+                        <span className="text-slate-500 ml-2">
+                          {job.scheduled_date || 'No date'} · {job.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Estimates */}
+              <div>
+                <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Estimates</h4>
+                {historyEstimates.length === 0 ? (
+                  <p className="text-sm text-slate-500">No estimates</p>
+                ) : (
+                  <div className="space-y-2">
+                    {historyEstimates.map((est) => (
+                      <div key={est.id} className="text-sm text-slate-300">
+                        <span className="text-white">{est.title}</span>
+                        <span className="text-slate-500 ml-2">
+                          ${Number(est.amount).toFixed(2)} · {est.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Invoices */}
+              <div>
+                <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Invoices</h4>
+                {historyInvoices.length === 0 ? (
+                  <p className="text-sm text-slate-500">No invoices</p>
+                ) : (
+                  <div className="space-y-2">
+                    {historyInvoices.map((inv) => (
+                      <div key={inv.id} className="text-sm text-slate-300">
+                        <span className="text-white">${Number(inv.amount).toFixed(2)}</span>
+                        <span className="text-slate-500 ml-2">
+                          Paid ${Number(inv.amount_paid).toFixed(2)} · {inv.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-800">
           <h2 className="text-sm font-medium text-slate-300">
@@ -200,12 +342,26 @@ export default function Customers() {
             {customers.map((c) => (
               <div key={c.id} className="px-5 py-4 flex items-center justify-between hover:bg-slate-800/50">
                 <div>
-                  <div className="font-medium text-white">{c.name}</div>
+                  <div className="font-medium text-white flex items-center gap-2">
+                    {c.name}
+                    {c.do_not_service && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-medium">
+                        DO NOT SERVICE
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-slate-400 mt-0.5">
                     {[c.email, c.phone, c.address].filter(Boolean).join(' · ') || 'No contact info'}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openHistory(c)}
+                    className="p-2 text-slate-400 hover:text-sky-400 transition-colors"
+                    title="History"
+                  >
+                    <History className="w-4 h-4" />
+                  </button>
                   <button
                     onClick={() => openEditForm(c)}
                     className="p-2 text-slate-400 hover:text-amber-400 transition-colors"
