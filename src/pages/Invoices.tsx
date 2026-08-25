@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, DollarSign, Send } from 'lucide-react'
+import { Plus, Pencil, Trash2, DollarSign, Send, Receipt } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 type Customer = { id: string; name: string; email?: string | null }
@@ -126,11 +126,12 @@ export default function Invoices() {
 
     const newPaid = Number(paymentInvoice.amount_paid) + extra
     const newStatus = newPaid >= Number(paymentInvoice.amount) ? 'paid' : 'partial'
+    const inv = paymentInvoice
 
     const { error } = await supabase
       .from('invoices')
       .update({ amount_paid: newPaid, status: newStatus })
-      .eq('id', paymentInvoice.id)
+      .eq('id', inv.id)
 
     if (error) {
       alert('Error recording payment: ' + error.message)
@@ -139,52 +140,114 @@ export default function Invoices() {
 
     setPaymentInvoice(null)
     setPaymentAmount('')
+
+    // Auto-send receipt when the invoice becomes fully paid
+    if (newStatus === 'paid' && inv.customers?.email) {
+      try {
+        const response = await fetch('/api/send-receipt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: inv.customers.email,
+            customerName: inv.customers.name,
+            amount: inv.amount,
+            amountPaid: newPaid,
+            jobTitle: inv.jobs?.title || null,
+          }),
+        })
+        const result = await response.json()
+        if (!response.ok) {
+          alert('Payment recorded, but receipt email failed: ' + (result.error || 'Unknown error'))
+        } else {
+          alert(`Payment recorded and receipt sent to ${inv.customers.email}`)
+        }
+      } catch (err: any) {
+        alert('Payment recorded, but receipt email failed: ' + (err.message || 'Unknown error'))
+      }
+    } else {
+      alert('Payment recorded.')
+    }
+
     loadData()
   }
 
   async function sendInvoice(inv: Invoice) {
-  if (!inv.customers?.email) {
-    alert('This customer has no email address on file.')
-    return
-  }
-
-  setSendingId(inv.id)
-
-  try {
-    const balance = Number(inv.amount) - Number(inv.amount_paid)
-
-    const response = await fetch('/api/send-invoice', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: inv.customers.email,
-        customerName: inv.customers.name,
-        amount: inv.amount,
-        balance: balance,
-        jobTitle: inv.jobs?.title || null,
-      }),
-    })
-
-    const result = await response.json()
-
-    if (!response.ok) {
-      throw new Error(result.error || 'Failed to send email')
+    if (!inv.customers?.email) {
+      alert('This customer has no email address on file.')
+      return
     }
 
-    // Mark as sent in the database
-    await supabase
-      .from('invoices')
-      .update({ status: inv.status === 'draft' ? 'sent' : inv.status })
-      .eq('id', inv.id)
+    setSendingId(inv.id)
 
-    alert(`Invoice sent to ${inv.customers.email}`)
-    loadData()
-  } catch (err: any) {
-    alert('Error sending invoice: ' + (err.message || 'Unknown error'))
-  } finally {
-    setSendingId(null)
+    try {
+      const balance = Number(inv.amount) - Number(inv.amount_paid)
+
+      const response = await fetch('/api/send-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: inv.customers.email,
+          customerName: inv.customers.name,
+          amount: inv.amount,
+          balance: balance,
+          jobTitle: inv.jobs?.title || null,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to send email')
+      }
+
+      await supabase
+        .from('invoices')
+        .update({ status: inv.status === 'draft' ? 'sent' : inv.status })
+        .eq('id', inv.id)
+
+      alert(`Invoice sent to ${inv.customers.email}`)
+      loadData()
+    } catch (err: any) {
+      alert('Error sending invoice: ' + (err.message || 'Unknown error'))
+    } finally {
+      setSendingId(null)
+    }
   }
-}
+
+  async function sendReceipt(inv: Invoice) {
+    if (!inv.customers?.email) {
+      alert('This customer has no email address on file.')
+      return
+    }
+
+    setSendingId(inv.id)
+
+    try {
+      const response = await fetch('/api/send-receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: inv.customers.email,
+          customerName: inv.customers.name,
+          amount: inv.amount,
+          amountPaid: inv.amount_paid,
+          jobTitle: inv.jobs?.title || null,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to send receipt')
+      }
+
+      alert(`Receipt sent to ${inv.customers.email}`)
+    } catch (err: any) {
+      alert('Error sending receipt: ' + (err.message || 'Unknown error'))
+    } finally {
+      setSendingId(null)
+    }
+  }
 
   useEffect(() => {
     loadData()
@@ -223,7 +286,7 @@ export default function Invoices() {
                 onChange={(e) => setCustomerId(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
               >
-                <option value="">— Select —</option>
+                <option value="">Select customer...</option>
                 {customers.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
@@ -236,14 +299,14 @@ export default function Invoices() {
                 onChange={(e) => setJobId(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
               >
-                <option value="">— Select —</option>
+                <option value="">Select job...</option>
                 {jobs.map((j) => (
                   <option key={j.id} value={j.id}>{j.title}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1.5">Total Amount *</label>
+              <label className="block text-xs text-slate-400 mb-1.5">Total Amount</label>
               <input
                 type="number"
                 step="0.01"
@@ -264,7 +327,7 @@ export default function Invoices() {
               />
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-3 pt-2">
             <button type="submit" className="bg-amber-500 hover:bg-amber-600 text-slate-900 text-sm font-medium px-4 py-2 rounded-lg">
               {editingId ? 'Update Invoice' : 'Create Invoice'}
             </button>
@@ -338,14 +401,25 @@ export default function Invoices() {
                       <div className="text-xs text-slate-500 capitalize">{inv.status}</div>
                     </div>
 
-                    <button
-                      onClick={() => sendInvoice(inv)}
-                      disabled={sendingId === inv.id}
-                      className="p-2 text-slate-400 hover:text-sky-400 disabled:opacity-50"
-                      title="Send Invoice"
-                    >
-                      <Send className="w-4 h-4" />
-                    </button>
+                    {balance > 0 ? (
+                      <button
+                        onClick={() => sendInvoice(inv)}
+                        disabled={sendingId === inv.id}
+                        className="p-2 text-slate-400 hover:text-sky-400 disabled:opacity-50"
+                        title="Send Invoice"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => sendReceipt(inv)}
+                        disabled={sendingId === inv.id}
+                        className="p-2 text-slate-400 hover:text-emerald-400 disabled:opacity-50"
+                        title="Send / Resend Receipt"
+                      >
+                        <Receipt className="w-4 h-4" />
+                      </button>
+                    )}
 
                     {balance > 0 && (
                       <button

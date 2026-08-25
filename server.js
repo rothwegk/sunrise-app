@@ -62,6 +62,54 @@ app.post('/api/send-invoice', async (req, res) => {
   }
 })
 
+// ----- Send Receipt (paid invoice) -----
+app.post('/api/send-receipt', async (req, res) => {
+  try {
+    const { to, customerName, amount, amountPaid, jobTitle } = req.body
+    if (!to) return res.status(400).json({ error: 'Missing recipient email' })
+
+    const paid = Number(amountPaid ?? amount).toFixed(2)
+    const total = Number(amount).toFixed(2)
+
+    const { data, error } = await resend.emails.send({
+      from: 'Sunrise Handyman Services <glenn@sunrisesvcs.com>',
+      to: [to],
+      subject: 'Payment Receipt – Sunrise Handyman Services',
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+          <h2 style="color: #d97706; margin-bottom: 8px;">Sunrise Handyman Services</h2>
+          <p style="font-size: 18px; font-weight: 600; color: #16a34a; margin: 0 0 16px;">Payment Received</p>
+          
+          <p>Hi ${customerName || 'there'},</p>
+          <p>Thank you! We've received your payment${jobTitle ? ` for <strong>${jobTitle}</strong>` : ''}.</p>
+          
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px 20px; margin: 24px 0;">
+            <p style="margin: 0 0 8px;"><strong>Invoice Total:</strong> $${total}</p>
+            <p style="margin: 0 0 8px;"><strong>Amount Paid:</strong> $${paid}</p>
+            <p style="margin: 0; color: #16a34a; font-weight: 600;">Balance Due: $0.00</p>
+          </div>
+
+          <p>This email serves as your official receipt. Please keep it for your records.</p>
+          <p>We appreciate your business!</p>
+          
+          <hr style="margin: 28px 0; border: none; border-top: 1px solid #e5e7eb;" />
+          <p style="color: #666; font-size: 12px; line-height: 1.5;">
+            Sunrise Handyman Services<br/>
+            glenn@sunrisesvcs.com<br/>
+            (352) 634-1962
+          </p>
+        </div>
+      `,
+    })
+
+    if (error) return res.status(500).json({ error: error.message })
+    res.json({ success: true, id: data?.id })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ error: 'Failed to send receipt' })
+  }
+})
+
 // ----- Send Estimate -----
 app.post('/api/send-estimate', async (req, res) => {
   try {
