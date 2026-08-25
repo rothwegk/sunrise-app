@@ -248,8 +248,15 @@ export default function Customers() {
             <div>
               <h3 className="text-lg font-medium text-white">{historyCustomer.name} — History</h3>
               {historyCustomer.do_not_service && (
-                <div className="mt-1 text-sm font-medium text-red-400">DO NOT SERVICE</div>
-              )}
+  <div className="mt-1">
+    <div className="text-sm font-medium text-red-400">DO NOT SERVICE</div>
+    {historyCustomer.do_not_service_reason && (
+      <div className="text-xs text-red-400/80 mt-0.5">
+        Reason: {historyCustomer.do_not_service_reason}
+      </div>
+    )}
+  </div>
+)}
             </div>
             <button
               onClick={() => setHistoryCustomer(null)}
@@ -355,28 +362,60 @@ export default function Customers() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => openHistory(c)}
-                    className="p-2 text-slate-400 hover:text-sky-400 transition-colors"
-                    title="History"
-                  >
-                    <History className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => openEditForm(c)}
-                    className="p-2 text-slate-400 hover:text-amber-400 transition-colors"
-                    title="Edit"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => deleteCustomer(c.id, c.name)}
-                    className="p-2 text-slate-400 hover:text-red-400 transition-colors"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+  <button
+    onClick={() => openHistory(c)}
+    className="p-2 text-slate-400 hover:text-sky-400 transition-colors"
+    title="History"
+  >
+    <History className="w-4 h-4" />
+  </button>
+
+  {c.do_not_service ? (
+    <button
+      onClick={async () => {
+        await supabase
+          .from('customers')
+          .update({ do_not_service: false, do_not_service_reason: null })
+          .eq('id', c.id)
+        loadCustomers()
+      }}
+      className="p-2 text-slate-400 hover:text-emerald-400 text-xs"
+      title="Unblock"
+    >
+      Unblock
+    </button>
+  ) : (
+    <button
+      onClick={async () => {
+        const reason = prompt('Reason for Do Not Service (optional):') || 'Manual block'
+        await supabase
+          .from('customers')
+          .update({ do_not_service: true, do_not_service_reason: reason })
+          .eq('id', c.id)
+        loadCustomers()
+      }}
+      className="p-2 text-slate-400 hover:text-red-400 text-xs"
+      title="Do Not Service"
+    >
+      Block
+    </button>
+  )}
+
+  <button
+    onClick={() => openEditForm(c)}
+    className="p-2 text-slate-400 hover:text-amber-400 transition-colors"
+    title="Edit"
+  >
+    <Pencil className="w-4 h-4" />
+  </button>
+  <button
+    onClick={() => deleteCustomer(c.id, c.name)}
+    className="p-2 text-slate-400 hover:text-red-400 transition-colors"
+    title="Delete"
+  >
+    <Trash2 className="w-4 h-4" />
+  </button>
+</div>
               </div>
             ))}
           </div>
