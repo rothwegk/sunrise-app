@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
@@ -45,7 +46,6 @@ export default function Calendar() {
     year: 'numeric',
   })
 
-  // Group jobs by date string (YYYY-MM-DD)
   const jobsByDate = useMemo(() => {
     const map: Record<string, Job[]> = {}
     jobs.forEach((job) => {
@@ -71,7 +71,6 @@ export default function Calendar() {
     setSelectedDate(null)
   }
 
-  // Build the grid cells (including leading empty days)
   const cells: (number | null)[] = []
   for (let i = 0; i < firstDayOfMonth; i++) cells.push(null)
   for (let d = 1; d <= daysInMonth; d++) cells.push(d)
@@ -112,7 +111,6 @@ export default function Calendar() {
 
       {/* Calendar grid */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden mb-6">
-        {/* Day headers */}
         <div className="grid grid-cols-7 border-b border-slate-800">
           {DAYS.map((day) => (
             <div
@@ -124,7 +122,6 @@ export default function Calendar() {
           ))}
         </div>
 
-        {/* Days */}
         <div className="grid grid-cols-7">
           {cells.map((day, idx) => {
             if (day === null) {
@@ -201,7 +198,12 @@ export default function Calendar() {
             <div className="divide-y divide-slate-800">
               {selectedJobs.map((job) => (
                 <div key={job.id} className="px-5 py-4">
-                  <div className="font-medium text-white">{job.title}</div>
+                  <Link
+                    to="/jobs"
+                    className="font-medium text-white hover:text-amber-400 transition-colors"
+                  >
+                    {job.title}
+                  </Link>
                   <div className="text-xs text-slate-400 mt-1">
                     {job.customers?.name || 'No customer'}
                     {job.scheduled_time && ` · ${job.scheduled_time}`}
