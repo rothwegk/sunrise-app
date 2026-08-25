@@ -48,6 +48,7 @@ export default function Jobs() {
   const [scheduledTime, setScheduledTime] = useState('')
   const [status, setStatus] = useState('unscheduled')
   const [previousStatus, setPreviousStatus] = useState<string | null>(null)
+  const [filter, setFilter] = useState<'active' | 'completed' | 'all'>('active')
 
   async function loadData() {
     setLoading(true)
@@ -216,6 +217,12 @@ export default function Jobs() {
     loadData()
   }, [])
 
+  const filteredJobs = jobs.filter((job) => {
+    if (filter === 'active') return job.status !== 'completed'
+    if (filter === 'completed') return job.status === 'completed'
+    return true
+  })
+
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
@@ -333,21 +340,44 @@ export default function Jobs() {
       )}
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-800">
+        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
           <h2 className="text-sm font-medium text-slate-300">
-            All Jobs {jobs.length > 0 && `(${jobs.length})`}
+            {filter === 'active' && 'Active Jobs'}
+            {filter === 'completed' && 'Completed Jobs'}
+            {filter === 'all' && 'All Jobs'}
+            {filteredJobs.length > 0 && ` (${filteredJobs.length})`}
           </h2>
+
+          <div className="flex gap-1">
+            {(['active', 'completed', 'all'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                  filter === f
+                    ? 'bg-amber-500/20 text-amber-400'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                }`}
+              >
+                {f === 'active' ? 'Active' : f === 'completed' ? 'Completed' : 'All'}
+              </button>
+            ))}
+          </div>
         </div>
 
         {loading ? (
           <div className="p-8 text-center text-slate-500 text-sm">Loading...</div>
-        ) : jobs.length === 0 ? (
+        ) : filteredJobs.length === 0 ? (
           <div className="p-8 text-center">
-            <p className="text-slate-500 text-sm">No jobs yet.</p>
+            <p className="text-slate-500 text-sm">
+              {filter === 'active' && 'No active jobs.'}
+              {filter === 'completed' && 'No completed jobs yet.'}
+              {filter === 'all' && 'No jobs yet.'}
+            </p>
           </div>
         ) : (
           <div className="divide-y divide-slate-800">
-            {jobs.map((job) => (
+            {filteredJobs.map((job) => (
               <div key={job.id} className="px-5 py-4 flex items-center justify-between hover:bg-slate-800/50">
                 <div>
                   <div className="font-medium text-white">{job.title}</div>
