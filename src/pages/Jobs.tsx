@@ -18,6 +18,7 @@ type Job = {
   scheduled_date: string | null
   scheduled_time: string | null
   customer_id: string | null
+  job_number: string | null
   customers?: { name: string } | null
   created_at: string
 }
@@ -64,6 +65,24 @@ export default function Jobs() {
     setLoading(false)
   }
 
+  async function getNextJobNumber(): Promise<string> {
+    const { data } = await supabase
+      .from('jobs')
+      .select('job_number')
+      .not('job_number', 'is', null)
+      .order('job_number', { ascending: false })
+      .limit(1)
+
+    if (data && data.length > 0 && data[0].job_number) {
+      const match = data[0].job_number.match(/SR-(\d+)/)
+      if (match) {
+        const next = parseInt(match[1], 10) + 1
+        return `SR-${next}`
+      }
+    }
+    return 'SR-1993'
+  }
+
   function openNewForm() {
     setEditingId(null)
     setTitle('')
@@ -92,7 +111,7 @@ export default function Jobs() {
     e.preventDefault()
     if (!title.trim()) return
 
-    const payload = {
+    const payload: any = {
       title: title.trim(),
       description: description.trim() || null,
       customer_id: customerId || null,
@@ -108,6 +127,9 @@ export default function Jobs() {
         return
       }
     } else {
+      // New job → assign next job number
+      payload.job_number = await getNextJobNumber()
+
       const { error } = await supabase.from('jobs').insert(payload)
       if (error) {
         alert('Error creating job: ' + error.message)
@@ -380,7 +402,12 @@ export default function Jobs() {
             {filteredJobs.map((job) => (
               <div key={job.id} className="px-5 py-4 flex items-center justify-between hover:bg-slate-800/50">
                 <div>
-                  <div className="font-medium text-white">{job.title}</div>
+                  <div className="font-medium text-white">
+                    {job.job_number && (
+                      <span className="text-amber-400 mr-2">{job.job_number}</span>
+                    )}
+                    {job.title}
+                  </div>
                   <div className="text-xs text-slate-400 mt-1">
                     {job.customers?.name || 'No customer'}
                     {job.scheduled_date && ` · ${job.scheduled_date}${job.scheduled_time ? ` at ${job.scheduled_time}` : ''}`}

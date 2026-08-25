@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, Send } from 'lucide-react'
+import { Plus, Pencil, Trash2, Send, ArrowRightCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 type Customer = {
@@ -18,6 +18,9 @@ type Estimate = {
   status: string
   notes: string | null
   customer_id: string | null
+  public_token?: string | null
+  job_id?: string | null
+  job_number?: string | null
   customers?: { name: string; email: string | null } | null
   created_at: string
 }
@@ -72,52 +75,127 @@ export default function Estimates() {
     setShowForm(true)
   }
 
-async function sendEstimate(est: Estimate) {
-  if (!est.customers?.email) {
-    alert('This customer has no email address on file.')
-    return
+  async function getNextJobNumber(): Promise<string> {
+    const { data } = await supabase
+      .from('jobs')
+      .select('job_number')
+      .not('job_number', 'is', null)
+      .order('job_number', { ascending: false })
+      .limit(1)
+
+    if (data && data.length > 0 && data[0].job_number) {
+      const match = data[0].job_number.match(/SR-(\d+)/)
+      if (match) {
+        const next = parseInt(match[1], 10) + 1
+        return `SR-${next}`
+      }
+    }
+    return 'SR-1993'
   }
 
-  if (!est.public_token) {
-    alert('This estimate is missing a public token. Please edit and re-save it.')
-    return
-  }
-
-  try {
-    const response = await fetch('/api/send-estimate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to: est.customers.email,
-        customerName: est.customers.name,
-        title: est.title,
-        amount: est.amount,
-        requireDeposit: est.require_deposit,
-        depositAmount: est.deposit_amount,
-        description: est.description,
-        token: est.public_token,
-      }),
-    })
-
-    const result = await response.json()
-
-    if (!response.ok) {
-      throw new Error(result.error || 'Failed to send email')
+  async function convertToJob(est: Estimate) {
+    if (est.job_id || est.status === 'converted') {
+      alert('This estimate has already been converted.')
+      return
     }
 
-    await supabase
+    if (!confirm(`Convert "${est.title}" to a job?`)) return
+
+    try {
+      const jobNumber = await getNextJobNumber()
+
+      const { data: job, error: jobError } = await supabase
+        .from('jobs')
+        .insert({
+          title: est.title,
+          description: est.description,
+          customer_id: est.customer_id,
+          status: 'unscheduled',
+          job_number: jobNumber,
+          estimate_id: est.id,
+        })
+        .select('id, job_number')
+        .single()
+
+      if (jobError) throw jobError
+
+      const { error: estError } = await supabase
+        .from('estimates')
+        .update({
+          status: 'converted',
+          job_id: job.id,
+          job_number: job.job_number,
+        })
+        .eq('id', est.id)
+
+      if (estError) throw estError
+
+      alert(`Converted to job ${job.job_number}`)
+      loadData()
+    } catch (err: any) {
+      alert('Error converting: ' + (err.message || 'Unknown error'))
+    }
+  }
+
+  async function markAccepted(est: Estimate) {
+    const { error } = await supabase
       .from('estimates')
-      .update({ status: 'sent' })
+      .update({ status: 'accepted' })
       .eq('id', est.id)
 
-    alert(`Estimate sent to ${est.customers.email}`)
+    if (error) {
+      alert('Error: ' + error.message)
+      return
+    }
     loadData()
-  } catch (err: any) {
-    alert('Error sending estimate: ' + (err.message || 'Unknown error'))
   }
-}  
 
-async function saveEstimate(e: React.FormEvent) {
+  async function sendEstimate(est: Estimate) {
+    if (!est.customers?.email) {
+      alert('This customer has no email address on file.')
+      return
+    }
+
+    if (!est.public_token) {
+      alert('This estimate is missing a public token. Please edit and re-save it.')
+      return
+    }
+
+    try {
+      const response = await fetch('/api/send-estimate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: est.customers.email,
+          customerName: est.customers.name,
+          title: est.title,
+          amount: est.amount,
+          requireDeposit: est.require_deposit,
+          depositAmount: est.deposit_amount,
+          description: est.description,
+          token: est.public_token,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to send email')
+      }
+
+      await supabase
+        .from('estimates')
+        .update({ status: 'sent' })
+        .eq('id', est.id)
+
+      alert(`Estimate sent to ${est.customers.email}`)
+      loadData()
+    } catch (err: any) {
+      alert('Error sending estimate: ' + (err.message || 'Unknown error'))
+    }
+  }
+
+  async function saveEstimate(e: React.FormEvent) {
     e.preventDefault()
     if (!title.trim() || !amount) return
 
@@ -284,7 +362,7 @@ async function saveEstimate(e: React.FormEvent) {
         </form>
       )}
 
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-800">
           <h2 className="text-sm font-medium text-slate-300">
             All Estimates {estimates.length > 0 && `(${estimates.length})`}
@@ -303,12 +381,34 @@ async function saveEstimate(e: React.FormEvent) {
                   <div className="text-xs text-slate-400 mt-1">
                     {est.customers?.name || 'No customer'} · ${Number(est.amount).toFixed(2)}
                     {est.require_deposit && ` · 50% deposit $${Number(est.deposit_amount).toFixed(2)}`}
+                    {est.job_number && ` · Job ${est.job_number}`}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <span className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300 capitalize">
                     {est.status}
                   </span>
+
+                  {est.status !== 'converted' && (
+                    <button
+                      onClick={() => convertToJob(est)}
+                      className="p-2 text-slate-400 hover:text-emerald-400"
+                      title="Convert to Job"
+                    >
+                      <ArrowRightCircle className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  {est.status === 'sent' && (
+                    <button
+                      onClick={() => markAccepted(est)}
+                      className="text-xs px-2 py-1 rounded bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
+                      title="Mark Accepted"
+                    >
+                      Accept
+                    </button>
+                  )}
+
                   <button
                     onClick={() => sendEstimate(est)}
                     className="p-2 text-slate-400 hover:text-sky-400"
