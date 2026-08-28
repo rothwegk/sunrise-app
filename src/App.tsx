@@ -11,7 +11,6 @@ import Estimates from './pages/Estimates'
 import Settings from './pages/Settings'
 import Calendar from './pages/Calendar'
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
@@ -52,7 +51,6 @@ export default function App() {
         <Route path="/login" element={<Login />} />
 
         <Route
-          <Route path="/" element={<Dashboard />} />
           element={
             <ProtectedRoute>
               <Layout />
