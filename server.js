@@ -203,7 +203,7 @@ app.post('/api/job-scheduled', async (req, res) => {
   try {
     const { to, customerName, jobTitle, scheduledDate, scheduledTime } = req.body
     
-    // 1. Sync to Google Calendar
+    // 1. Sync to Google Calendar using GoogleAuth object structure
     try {
       const clientEmail = process.env.GOOGLE_CLIENT_EMAIL?.trim();
       let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
@@ -213,17 +213,16 @@ app.post('/api/job-scheduled', async (req, res) => {
 
       if (clientEmail && privateKey && process.env.GOOGLE_CALENDAR_ID && scheduledDate) {
         
-        const calendarAuth = new google.auth.JWT(
-          clientEmail,
-          null,
-          privateKey,
-          ['https://www.googleapis.com/auth/calendar.events']
-        );
+        // This is the bulletproof way Google expects credentials now
+        const auth = new google.auth.GoogleAuth({
+          credentials: {
+            client_email: clientEmail,
+            private_key: privateKey,
+          },
+          scopes: ['https://www.googleapis.com/auth/calendar.events']
+        });
         
-        // This forces Google to verify the credentials right now
-        await calendarAuth.authorize();
-        
-        const calendar = google.calendar({ version: 'v3', auth: calendarAuth });
+        const calendar = google.calendar({ version: 'v3', auth });
 
         let startObj = { date: scheduledDate };
         let d = new Date(scheduledDate);
@@ -262,15 +261,10 @@ app.post('/api/job-scheduled', async (req, res) => {
         });
         console.log("Calendar sync successful!");
       } else {
-        console.log("Skipping Calendar Sync. Missing Variables:", {
-          hasEmail: !!clientEmail,
-          hasKey: !!privateKey,
-          hasCalendarId: !!process.env.GOOGLE_CALENDAR_ID
-        });
+        console.log("Skipping Calendar Sync. Missing Variables.");
       }
     } catch (calErr) {
       console.error('Google Calendar error detail:', calErr.message || calErr);
-      // Catching the error here ensures the text message still goes out
     }
 
     // 2. Send Twilio Text
