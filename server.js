@@ -135,7 +135,7 @@ app.post('/api/send-estimate', async (req, res) => {
           <h2 style="color: #d97706;">Sunrise Handyman Services</h2>
           <p>Hi ${customerName || 'there'},</p>
           <p>Here is your estimate:</p>
-        
+          
           <div style="background: #f8f8f8; padding: 16px; border-radius: 8px; margin: 20px 0;">
             <h3 style="margin-top: 0;">${title}</h3>
             ${description ? `<p>${description}</p>` : ''}
@@ -224,6 +224,51 @@ app.post('/api/job-scheduled', async (req, res) => {
     res.status(500).json({ error: err.message || 'Failed to send text' })
   }
 })
+
+// ----- Automated Reminders Text -----
+app.post('/api/send-reminders', async (req, res) => {
+  try {
+    // Determine tomorrow's date 
+    const tomorrow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const targetDate = tomorrow.toLocaleDateString("en-CA"); // Yields YYYY-MM-DD
+
+    // Fetch scheduled jobs for tomorrow
+    const { data: jobs, error } = await supabase
+      .from('jobs')
+      .select('id, scheduled_time, customers(name, phone)')
+      .eq('scheduled_date', targetDate)
+      .eq('status', 'scheduled');
+
+    if (error) throw error;
+    if (!jobs || jobs.length === 0) return res.status(200).json({ message: 'No jobs' });
+
+    // Dispatch messages
+    for (const job of jobs) {
+      const customer = Array.isArray(job.customers) ? job.customers[0] : job.customers;
+      if (!customer?.phone) continue;
+
+      // 1. To Customer
+      await twilioClient.messages.create({
+        body: `Hi ${customer.name}, a reminder that Sunrise Handyman Services is scheduled for tomorrow at ${job.scheduled_time}. See you then!`,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: customer.phone
+      });
+
+      // 2. To You
+      await twilioClient.messages.create({
+        body: `Automated reminder sent to ${customer.name} for tomorrow's job.`,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: process.env.MY_PERSONAL_PHONE 
+      });
+    }
+
+    res.status(200).json({ success: true, count: jobs.length });
+  } catch (error) {
+    console.error('Reminder error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // ----- Approve Estimate -----
 app.get('/api/estimate/approve', async (req, res) => {
