@@ -9,7 +9,7 @@ type Job = {
   status: string
   scheduled_date: string | null
   scheduled_time: string | null
-  customers?: { name: string } | null
+  customers?: any
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
