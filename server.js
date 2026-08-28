@@ -27,18 +27,6 @@ const twilioClient = twilio(
   { accountSid: process.env.TWILIO_ACCOUNT_SID }
 )
 
-// --- Google Calendar Setup ---
-let calendarAuth;
-if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
-  calendarAuth = new google.auth.JWT(
-    process.env.GOOGLE_CLIENT_EMAIL,
-    null,
-    process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'), // Fixes Render's stringified newlines
-    ['https://www.googleapis.com/auth/calendar.events']
-  );
-}
-const calendar = google.calendar({ version: 'v3', auth: calendarAuth });
-
 app.use(cors())
 app.use(express.json())
 app.use(express.static(path.join(__dirname, 'dist')))
@@ -216,14 +204,32 @@ app.post('/api/job-scheduled', async (req, res) => {
     const { to, customerName, jobTitle, scheduledDate, scheduledTime } = req.body
     
     // 1. Sync to Google Calendar
-    if (calendarAuth && process.env.GOOGLE_CALENDAR_ID && scheduledDate) {
-      try {
+    try {
+      const clientEmail = process.env.GOOGLE_CLIENT_EMAIL?.trim();
+      let privateKey = process.env.GOOGLE_PRIVATE_KEY || '';
+      
+      // Auto-scrub accidental quotes and fix line breaks
+      privateKey = privateKey.replace(/^"|"$/g, '').replace(/\\n/g, '\n');
+
+      if (clientEmail && privateKey && process.env.GOOGLE_CALENDAR_ID && scheduledDate) {
+        
+        const calendarAuth = new google.auth.JWT(
+          clientEmail,
+          null,
+          privateKey,
+          ['https://www.googleapis.com/auth/calendar.events']
+        );
+        
+        // This forces Google to verify the credentials right now
+        await calendarAuth.authorize();
+        
+        const calendar = google.calendar({ version: 'v3', auth: calendarAuth });
+
         let startObj = { date: scheduledDate };
         let d = new Date(scheduledDate);
         d.setUTCDate(d.getUTCDate() + 1);
         let endObj = { date: d.toISOString().split('T')[0] };
 
-        // Handle specific times (creates a 2-hour block)
         if (scheduledTime) {
           const match = scheduledTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
           if (match) {
@@ -240,13 +246,13 @@ app.post('/api/job-scheduled', async (req, res) => {
                const endHourStr = endH.toString().padStart(2, '0');
                endObj = { dateTime: `${scheduledDate}T${endHourStr}:${m}:00`, timeZone: 'America/New_York' };
             } else {
-               startObj = { date: scheduledDate }; // Fallback to all day if rolling over midnight
+               startObj = { date: scheduledDate };
             }
           }
         }
 
         await calendar.events.insert({
-          calendarId: process.env.GOOGLE_CALENDAR_ID,
+          calendarId: process.env.GOOGLE_CALENDAR_ID.trim(),
           resource: {
             summary: `Sunrise: ${customerName}`,
             description: `Job: ${jobTitle || 'N/A'}`,
@@ -254,12 +260,20 @@ app.post('/api/job-scheduled', async (req, res) => {
             end: endObj
           },
         });
-      } catch (calErr) {
-        console.error('Google Calendar error:', calErr);
-        // Do not crash the request if just the calendar sync fails
+        console.log("Calendar sync successful!");
+      } else {
+        console.log("Skipping Calendar Sync. Missing Variables:", {
+          hasEmail: !!clientEmail,
+          hasKey: !!privateKey,
+          hasCalendarId: !!process.env.GOOGLE_CALENDAR_ID
+        });
       }
+    } catch (calErr) {
+      console.error('Google Calendar error detail:', calErr.message || calErr);
+      // Catching the error here ensures the text message still goes out
     }
 
+    // 2. Send Twilio Text
     if (!to) {
       return res.status(400).json({ error: 'Missing phone number' })
     }
