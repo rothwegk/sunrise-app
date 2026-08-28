@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url'
 import { createClient } from '@supabase/supabase-js'
 import twilio from 'twilio'
 import { google } from 'googleapis'
+import Stripe from 'stripe'
 
 dotenv.config()
 
@@ -27,6 +28,9 @@ const twilioClient = twilio(
   { accountSid: process.env.TWILIO_ACCOUNT_SID }
 )
 
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+const baseUrl = 'https://sunrise-app-web.onrender.com'
+
 app.use(cors())
 app.use(express.json())
 app.use(express.static(path.join(__dirname, 'dist')))
@@ -34,7 +38,7 @@ app.use(express.static(path.join(__dirname, 'dist')))
 // ----- Send Invoice -----
 app.post('/api/send-invoice', async (req, res) => {
   try {
-    const { to, customerName, amount, balance, jobTitle } = req.body
+    const { to, customerName, amount, balance, jobTitle, checkoutUrl, ccFee } = req.body
     if (!to) return res.status(400).json({ error: 'Missing recipient email' })
 
     const { data, error } = await resend.emails.send({
@@ -42,15 +46,27 @@ app.post('/api/send-invoice', async (req, res) => {
       to: [to],
       subject: 'Invoice from Sunrise Handyman Services',
       html: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2>Sunrise Handyman Services</h2>
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+          <h2 style="color: #d97706;">Sunrise Handyman Services</h2>
           <p>Hi ${customerName || 'there'},</p>
           <p>Here is your invoice${jobTitle ? ` for <strong>${jobTitle}</strong>` : ''}:</p>
-          <p style="font-size: 18px;"><strong>Total: $${Number(amount).toFixed(2)}</strong></p>
-          ${balance > 0 ? `<p>Balance due: <strong>$${Number(balance).toFixed(2)}</strong></p>` : `<p>Status: <strong>Paid</strong></p>`}
+          
+          <div style="background: #f8f8f8; padding: 16px; border-radius: 8px; margin: 20px 0;">
+            <p style="font-size: 18px; margin-top: 0;"><strong>Total: $${Number(amount).toFixed(2)}</strong></p>
+            ${balance > 0 ? `<p style="color: #dc2626; font-weight: bold;">Balance due: $${Number(balance).toFixed(2)}</p>` : `<p style="color: #16a34a; font-weight: bold;">Status: Paid</p>`}
+          </div>
+
+          ${checkoutUrl && balance > 0 ? `
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin-top: 0; font-weight: bold;">Online Payment Option</p>
+            <p style="font-size: 14px; margin-bottom: 16px;">As discussed, a 3.5% processing fee ($${Number(ccFee).toFixed(2)}) is applied to credit card payments. If you prefer to pay via cash, check, or Zelle, your total remains $${Number(balance).toFixed(2)}.</p>
+            <a href="${checkoutUrl}" style="background: #16a34a; color: white; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Pay $${(Number(balance) + Number(ccFee)).toFixed(2)} Securely</a>
+          </div>
+          ` : ''}
+          
           <p>Thank you for your business!</p>
-          <hr />
-          <p style="color: #666; font-size: 12px;">Sunrise Handyman Services<br/>glenn@sunrisesvcs.com</p>
+          <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;" />
+          <p style="color: #666; font-size: 12px;">Sunrise Handyman Services<br/>glenn@sunrisesvcs.com<br/>(352) 634-1962</p>
         </div>
       `,
     })
@@ -119,7 +135,6 @@ app.post('/api/send-estimate', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' })
     }
 
-    const baseUrl = 'https://sunrise-app-web.onrender.com'
     const approveUrl = `${baseUrl}/api/estimate/approve?token=${token}`
     const declineUrl = `${baseUrl}/api/estimate/decline?token=${token}`
 
@@ -414,6 +429,37 @@ app.get('/api/estimate/decline', async (req, res) => {
   } catch (err) {
     console.error(err)
     res.status(500).send('Something went wrong. Please try again or call us.')
+  }
+})
+
+// ----- Create Stripe Checkout Link -----
+app.post('/api/create-checkout', async (req, res) => {
+  try {
+    const { jobTitle, amount } = req.body
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      mode: 'payment',
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: jobTitle || 'Sunrise Handyman Services',
+            },
+            unit_amount: Math.round(amount * 100), 
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: `${baseUrl}/success`, 
+      cancel_url: `${baseUrl}/cancel`,
+    })
+
+    res.json({ url: session.url })
+  } catch (err) {
+    console.error('Stripe error:', err)
+    res.status(500).json({ error: err.message })
   }
 })
 

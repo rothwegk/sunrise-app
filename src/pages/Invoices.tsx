@@ -25,8 +25,14 @@ export default function Invoices() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  
   const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null)
   const [paymentAmount, setPaymentAmount] = useState('')
+  
+  const [invoiceToSend, setInvoiceToSend] = useState<Invoice | null>(null)
+  const [includeCc, setIncludeCc] = useState(false)
+  const [isSending, setIsSending] = useState(false)
+  
   const [sendingId, setSendingId] = useState<string | null>(null)
 
   const [customerId, setCustomerId] = useState('')
@@ -47,6 +53,7 @@ export default function Invoices() {
     if (invoicesRes.data) setInvoices(invoicesRes.data)
     if (customersRes.data) setCustomers(customersRes.data)
     if (jobsRes.data) setJobs(jobsRes.data)
+    if (invoicesRes.error) console.error('Error loading invoices:', invoicesRes.error)
     setLoading(false)
   }
 
@@ -141,7 +148,6 @@ export default function Invoices() {
     setPaymentInvoice(null)
     setPaymentAmount('')
 
-    // Auto-send receipt when the invoice becomes fully paid
     if (newStatus === 'paid' && inv.customers?.email) {
       try {
         const response = await fetch('/api/send-receipt', {
@@ -171,16 +177,44 @@ export default function Invoices() {
     loadData()
   }
 
-  async function sendInvoice(inv: Invoice) {
+  function openSendDialog(inv: Invoice) {
     if (!inv.customers?.email) {
       alert('This customer has no email address on file.')
       return
     }
+    setInvoiceToSend(inv)
+    setIncludeCc(false)
+  }
 
-    setSendingId(inv.id)
+  async function confirmSendInvoice() {
+    const inv = invoiceToSend
+    if (!inv || !inv.customers?.email) return
+    
+    setIsSending(true)
 
     try {
       const balance = Number(inv.amount) - Number(inv.amount_paid)
+      let checkoutUrl = null
+      let ccFee = 0
+
+      if (includeCc) {
+        // Calculate exact 3.5% fee
+        ccFee = Number((balance * 0.035).toFixed(2))
+        const totalWithFee = balance + ccFee
+
+        const stripeRes = await fetch('/api/create-checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jobTitle: inv.jobs?.title || 'Sunrise Handyman Services',
+            amount: totalWithFee,
+          }),
+        })
+        
+        const stripeData = await stripeRes.json()
+        if (!stripeRes.ok) throw new Error(stripeData.error || 'Failed to generate Stripe link')
+        checkoutUrl = stripeData.url
+      }
 
       const response = await fetch('/api/send-invoice', {
         method: 'POST',
@@ -191,6 +225,8 @@ export default function Invoices() {
           amount: inv.amount,
           balance: balance,
           jobTitle: inv.jobs?.title || null,
+          checkoutUrl: checkoutUrl, 
+          ccFee: ccFee
         }),
       })
 
@@ -205,12 +241,20 @@ export default function Invoices() {
         .update({ status: inv.status === 'draft' ? 'sent' : inv.status })
         .eq('id', inv.id)
 
-      alert(`Invoice sent to ${inv.customers.email}`)
+      if (checkoutUrl) {
+        await navigator.clipboard.writeText(checkoutUrl)
+        alert(`Invoice sent to ${inv.customers.email} with Credit Card option.\nThe Stripe link was copied to your clipboard.`)
+      } else {
+        alert(`Invoice sent to ${inv.customers.email} without payment link.`)
+      }
+      
       loadData()
     } catch (err: any) {
       alert('Error sending invoice: ' + (err.message || 'Unknown error'))
     } finally {
-      setSendingId(null)
+      setIsSending(false)
+      setInvoiceToSend(null)
+      setIncludeCc(false)
     }
   }
 
@@ -338,6 +382,44 @@ export default function Invoices() {
         </form>
       )}
 
+      {invoiceToSend && (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 mb-6">
+          <h3 className="text-sm font-medium text-white mb-2">
+            Send Invoice to {invoiceToSend.customers?.name}
+          </h3>
+          <p className="text-xs text-slate-400 mb-5">
+            Base Balance: ${getBalance(invoiceToSend).toFixed(2)}
+          </p>
+          
+          <label className="flex items-center gap-3 text-sm text-white mb-6 cursor-pointer select-none">
+            <input 
+              type="checkbox" 
+              checked={includeCc} 
+              onChange={(e) => setIncludeCc(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-sky-500 focus:ring-sky-500"
+            />
+            Include credit card payment link (adds 3.5% fee)
+          </label>
+
+          <div className="flex gap-3">
+            <button 
+              onClick={confirmSendInvoice} 
+              disabled={isSending}
+              className="bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-lg flex items-center gap-2"
+            >
+              <Send className="w-4 h-4" />
+              {isSending ? 'Sending...' : 'Send Invoice'}
+            </button>
+            <button 
+              onClick={() => { setInvoiceToSend(null); setIncludeCc(false) }} 
+              className="text-slate-400 hover:text-white text-sm px-3 py-2"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {paymentInvoice && (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 mb-6">
           <h3 className="text-sm font-medium text-white mb-3">
@@ -403,8 +485,8 @@ export default function Invoices() {
 
                     {balance > 0 ? (
                       <button
-                        onClick={() => sendInvoice(inv)}
-                        disabled={sendingId === inv.id}
+                        onClick={() => openSendDialog(inv)}
+                        disabled={isSending || sendingId === inv.id}
                         className="p-2 text-slate-400 hover:text-sky-400 disabled:opacity-50"
                         title="Send Invoice"
                       >
