@@ -10,6 +10,13 @@ type Customer = {
   phone: string | null
 }
 
+type Property = {
+  id: string
+  customer_id: string
+  address: string
+  is_primary: boolean
+}
+
 type Job = {
   id: string
   title: string
@@ -18,8 +25,10 @@ type Job = {
   scheduled_date: string | null
   scheduled_time: string | null
   customer_id: string | null
+  property_id: string | null
   job_number: string | null
   customers?: { name: string } | null
+  properties?: { address: string } | null
   created_at: string
 }
 
@@ -39,12 +48,14 @@ const timeOptions = [
 export default function Jobs() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
+  const [properties, setProperties] = useState<Property[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [customerId, setCustomerId] = useState('')
+  const [propertyId, setPropertyId] = useState('')
   const [scheduledDate, setScheduledDate] = useState<Date | null>(null)
   const [scheduledTime, setScheduledTime] = useState('')
   const [status, setStatus] = useState('unscheduled')
@@ -53,15 +64,17 @@ export default function Jobs() {
 
   async function loadData() {
     setLoading(true)
-    const [jobsRes, customersRes] = await Promise.all([
+    const [jobsRes, customersRes, propertiesRes] = await Promise.all([
       supabase
         .from('jobs')
-        .select('*, customers(name)')
+        .select('*, customers(name), properties(address)')
         .order('created_at', { ascending: false }),
       supabase.from('customers').select('id, name, phone').order('name'),
+      supabase.from('properties').select('id, customer_id, address, is_primary')
     ])
     if (jobsRes.data) setJobs(jobsRes.data)
     if (customersRes.data) setCustomers(customersRes.data)
+    if (propertiesRes.data) setProperties(propertiesRes.data)
     setLoading(false)
   }
 
@@ -88,6 +101,7 @@ export default function Jobs() {
     setTitle('')
     setDescription('')
     setCustomerId('')
+    setPropertyId('')
     setScheduledDate(null)
     setScheduledTime('')
     setStatus('unscheduled')
@@ -100,11 +114,26 @@ export default function Jobs() {
     setTitle(job.title)
     setDescription(job.description || '')
     setCustomerId(job.customer_id || '')
+    setPropertyId(job.property_id || '')
     setScheduledDate(job.scheduled_date ? new Date(job.scheduled_date) : null)
     setScheduledTime(job.scheduled_time || '')
     setStatus(job.status)
     setPreviousStatus(job.status)
     setShowForm(true)
+  }
+
+  // Handle customer change to auto-select their primary address if available
+  function handleCustomerChange(newCustomerId: string) {
+    setCustomerId(newCustomerId)
+    const customerProps = properties.filter(p => p.customer_id === newCustomerId)
+    if (customerProps.length === 1) {
+      setPropertyId(customerProps[0].id)
+    } else if (customerProps.length > 1) {
+      const primary = customerProps.find(p => p.is_primary)
+      setPropertyId(primary ? primary.id : '')
+    } else {
+      setPropertyId('')
+    }
   }
 
   async function saveJob(e: React.FormEvent) {
@@ -115,6 +144,7 @@ export default function Jobs() {
       title: title.trim(),
       description: description.trim() || null,
       customer_id: customerId || null,
+      property_id: propertyId || null,
       scheduled_date: scheduledDate ? scheduledDate.toISOString().split('T')[0] : null,
       scheduled_time: scheduledTime || null,
       status,
@@ -127,7 +157,6 @@ export default function Jobs() {
         return
       }
     } else {
-      // New job → assign next job number
       payload.job_number = await getNextJobNumber()
 
       const { error } = await supabase.from('jobs').insert(payload)
@@ -137,7 +166,6 @@ export default function Jobs() {
       }
     }
 
-    // Send scheduled confirmation once when job becomes scheduled
     const becameScheduled =
       status === 'scheduled' && (previousStatus === null || previousStatus !== 'scheduled')
 
@@ -245,6 +273,9 @@ export default function Jobs() {
     return true
   })
 
+  // Filter properties specifically for the dropdown based on currently selected customer
+  const availableProperties = properties.filter(p => p.customer_id === customerId)
+
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
@@ -282,12 +313,32 @@ export default function Jobs() {
               <label className="block text-xs text-slate-400 mb-1.5">Customer</label>
               <select
                 value={customerId}
-                onChange={(e) => setCustomerId(e.target.value)}
+                onChange={(e) => handleCustomerChange(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
               >
                 <option value="">— Select customer —</option>
                 {customers.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Conditionally render the Address dropdown only if a customer is selected */}
+            <div>
+              <label className="block text-xs text-slate-400 mb-1.5">Service Address</label>
+              <select
+                value={propertyId}
+                onChange={(e) => setPropertyId(e.target.value)}
+                disabled={!customerId}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="">
+                  {!customerId ? '— Select customer first —' : '— Select address —'}
+                </option>
+                {availableProperties.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.address} {p.is_primary ? '(Primary)' : ''}
+                  </option>
                 ))}
               </select>
             </div>
@@ -410,8 +461,9 @@ export default function Jobs() {
                   </div>
                   <div className="text-xs text-slate-400 mt-1">
                     {job.customers?.name || 'No customer'}
-                    {job.scheduled_date && ` · ${job.scheduled_date}${job.scheduled_time ? ` at ${job.scheduled_time}` : ''}`}
-                    {` · ${job.status}`}
+                    {job.properties?.address && <span className="text-slate-500"> • {job.properties.address}</span>}
+                    {job.scheduled_date && ` • ${job.scheduled_date}${job.scheduled_time ? ` at ${job.scheduled_time}` : ''}`}
+                    {` • ${job.status}`}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
