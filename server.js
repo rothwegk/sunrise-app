@@ -6,6 +6,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { createClient } from '@supabase/supabase-js'
 import twilio from 'twilio'
+import { google } from 'googleapis'
 
 dotenv.config()
 
@@ -25,6 +26,18 @@ const twilioClient = twilio(
   process.env.TWILIO_API_SECRET,
   { accountSid: process.env.TWILIO_ACCOUNT_SID }
 )
+
+// --- Google Calendar Setup ---
+let calendarAuth;
+if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+  calendarAuth = new google.auth.JWT(
+    process.env.GOOGLE_CLIENT_EMAIL,
+    null,
+    process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'), // Fixes Render's stringified newlines
+    ['https://www.googleapis.com/auth/calendar.events']
+  );
+}
+const calendar = google.calendar({ version: 'v3', auth: calendarAuth });
 
 app.use(cors())
 app.use(express.json())
@@ -197,10 +210,56 @@ app.post('/api/on-my-way', async (req, res) => {
   }
 })
 
-// ----- Job Scheduled Text -----
+// ----- Job Scheduled Text & Calendar Sync -----
 app.post('/api/job-scheduled', async (req, res) => {
   try {
     const { to, customerName, jobTitle, scheduledDate, scheduledTime } = req.body
+    
+    // 1. Sync to Google Calendar
+    if (calendarAuth && process.env.GOOGLE_CALENDAR_ID && scheduledDate) {
+      try {
+        let startObj = { date: scheduledDate };
+        let d = new Date(scheduledDate);
+        d.setUTCDate(d.getUTCDate() + 1);
+        let endObj = { date: d.toISOString().split('T')[0] };
+
+        // Handle specific times (creates a 2-hour block)
+        if (scheduledTime) {
+          const match = scheduledTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+          if (match) {
+            let [_, h, m, ampm] = match;
+            h = parseInt(h);
+            if (ampm.toUpperCase() === 'PM' && h !== 12) h += 12;
+            if (ampm.toUpperCase() === 'AM' && h === 12) h = 0;
+            
+            const hourStr = h.toString().padStart(2, '0');
+            startObj = { dateTime: `${scheduledDate}T${hourStr}:${m}:00`, timeZone: 'America/New_York' };
+            
+            let endH = h + 2;
+            if (endH < 24) {
+               const endHourStr = endH.toString().padStart(2, '0');
+               endObj = { dateTime: `${scheduledDate}T${endHourStr}:${m}:00`, timeZone: 'America/New_York' };
+            } else {
+               startObj = { date: scheduledDate }; // Fallback to all day if rolling over midnight
+            }
+          }
+        }
+
+        await calendar.events.insert({
+          calendarId: process.env.GOOGLE_CALENDAR_ID,
+          resource: {
+            summary: `Sunrise: ${customerName}`,
+            description: `Job: ${jobTitle || 'N/A'}`,
+            start: startObj,
+            end: endObj
+          },
+        });
+      } catch (calErr) {
+        console.error('Google Calendar error:', calErr);
+        // Do not crash the request if just the calendar sync fails
+      }
+    }
+
     if (!to) {
       return res.status(400).json({ error: 'Missing phone number' })
     }
@@ -228,12 +287,10 @@ app.post('/api/job-scheduled', async (req, res) => {
 // ----- Automated Reminders Text -----
 app.post('/api/send-reminders', async (req, res) => {
   try {
-    // Determine tomorrow's date 
     const tomorrow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const targetDate = tomorrow.toLocaleDateString("en-CA"); // Yields YYYY-MM-DD
+    const targetDate = tomorrow.toLocaleDateString("en-CA");
 
-    // Fetch scheduled jobs for tomorrow
     const { data: jobs, error } = await supabase
       .from('jobs')
       .select('id, scheduled_time, customers(name, phone)')
@@ -243,19 +300,16 @@ app.post('/api/send-reminders', async (req, res) => {
     if (error) throw error;
     if (!jobs || jobs.length === 0) return res.status(200).json({ message: 'No jobs' });
 
-    // Dispatch messages
     for (const job of jobs) {
       const customer = Array.isArray(job.customers) ? job.customers[0] : job.customers;
       if (!customer?.phone) continue;
 
-      // 1. To Customer
       await twilioClient.messages.create({
         body: `Hi ${customer.name}, a reminder that Sunrise Handyman Services is scheduled for tomorrow at ${job.scheduled_time}. See you then!`,
         from: process.env.TWILIO_PHONE_NUMBER,
         to: customer.phone
       });
 
-      // 2. To You
       await twilioClient.messages.create({
         body: `Automated reminder sent to ${customer.name} for tomorrow's job.`,
         from: process.env.TWILIO_PHONE_NUMBER,
